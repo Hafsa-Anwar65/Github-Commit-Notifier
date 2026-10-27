@@ -1,24 +1,24 @@
-# GitHub Commit Notifier
+<div align="center">
 
-A lightweight Flask server that listens for GitHub webhook events (pushes
-and pull requests) and prints a clean, formatted notification straight to
-your terminal — in real time, with no manual checking required.
+# 🔔 GitHub Commit Notifier
 
-```
-GitHub Repo Event → GitHub Webhook → Cloudflare Tunnel → Flask Server → Terminal Notification
-```
+**Real-time GitHub push and pull request notifications, printed straight to your terminal.**
+
+A lightweight Flask webhook server, exposed to the internet through a Cloudflare Tunnel, so you never have to refresh a repo page to see what changed.
+
+![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?logo=python&logoColor=white&style=flat-square)
+![Flask](https://img.shields.io/badge/Flask-3.0-000000?logo=flask&logoColor=white&style=flat-square)
+![GitHub Webhooks](https://img.shields.io/badge/GitHub-Webhooks-181717?logo=github&logoColor=white&style=flat-square)
+![Cloudflare Tunnel](https://img.shields.io/badge/Cloudflare-Tunnel-F38020?logo=cloudflare&logoColor=white&style=flat-square)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+
+</div>
 
 ---
 
-## What it does
+## Overview
 
-Every time something happens on a watched GitHub repository — a push, a
-pull request opening — GitHub sends an event payload to this server.
-The server reads the payload, extracts the useful details (who pushed,
-which branch, the commit messages, the PR title), and prints a
-formatted notification to the terminal the moment it arrives.
-
-**Example output:**
+Every time something happens on a watched repository, GitHub sends an event payload to this server. The server pulls out what matters (who pushed, which branch, the commit messages, the PR title) and prints a clean notification the moment it arrives.
 
 ```
 ============================================================
@@ -33,15 +33,34 @@ Commits    : 1
 ============================================================
 ```
 
+### Supported events
+
+| Event | What gets printed |
+|---|---|
+| `push` | Repository, branch, pusher, commit count, and each commit's short SHA, message and author |
+| `pull_request` | Action (opened, closed, reopened…), PR number, title and author |
+| `ping` | Confirmation that the webhook is connected |
+| Anything else | The event type, so nothing is dropped silently |
+
 ---
 
-## Tech stack
+## How it works
 
-| Component | Purpose |
+```mermaid
+flowchart LR
+    A["GitHub repo<br/>(push / PR)"] -->|HTTPS POST| B["GitHub Webhook"]
+    B --> C["Cloudflare Tunnel<br/>public URL"]
+    C -->|forwards to localhost:5000| D["Flask server<br/>/webhook"]
+    D -->|parses X-GitHub-Event + JSON| E["🖥️ Terminal notification"]
+```
+
+GitHub can't reach `localhost` directly, so the Cloudflare Tunnel gives the local server a public HTTPS URL without opening ports or setting up a cloud server.
+
+| Component | Role |
 |---|---|
-| **Python + Flask** | Receives and parses incoming webhook payloads |
-| **GitHub Webhooks** | Sends event data (push, pull_request, ping) whenever something happens on the repo |
-| **Cloudflare Tunnel** | Exposes the local Flask server to the public internet, since GitHub can't reach `localhost` directly |
+| **Python + Flask** | Receives and parses webhook payloads on `/webhook` |
+| **GitHub Webhooks** | Sends event data whenever something happens on the repo |
+| **Cloudflare Tunnel** | Exposes the local server to the internet. Quick tunnels need no account |
 
 ---
 
@@ -50,29 +69,22 @@ Commits    : 1
 ### Prerequisites
 
 - Python 3.8+
-- A GitHub repository you have admin access to (to add a webhook)
-- [cloudflared](https://github.com/cloudflare/cloudflared/releases/latest) — Cloudflare's tunnel tool (no account required for quick tunnels)
+- Admin access to a GitHub repository (to add a webhook)
+- [cloudflared](https://github.com/cloudflare/cloudflared/releases/latest)
 
-### 1. Clone the repo
+### 1. Clone and install
 
 ```bash
-git clone https://github.com/your-username/github-commit-notifier.git
+git clone https://github.com/Hafsa-Anwar65/github-commit-notifier.git
 cd github-commit-notifier
-```
-
-### 2. Install dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
-### 3. Run the server
+### 2. Run the server
 
 ```bash
 python app.py
 ```
-
-You should see:
 
 ```
 Starting GitHub Commit Notifier...
@@ -81,49 +93,35 @@ Local URL: http://localhost:5000/webhook
 
 Leave this terminal running.
 
-### 4. Start a Cloudflare Tunnel
+### 3. Start a Cloudflare Tunnel
 
-In a **separate** terminal, from the same folder:
+In a second terminal:
 
 ```bash
 cloudflared tunnel --url http://localhost:5000
 ```
 
-Cloudflare will print a public URL that looks like:
+Copy the public URL it prints, which looks like `https://your-random-subdomain.trycloudflare.com`.
 
-```
-https://your-random-subdomain.trycloudflare.com
-```
+> **Note:** quick tunnels get a new URL every time `cloudflared` restarts. If you restart it, update the webhook URL on GitHub.
 
-Copy it — this is what GitHub will send events to. Leave this terminal
-running too.
+### 4. Add the webhook on GitHub
 
-> **Note:** Free "quick tunnels" generate a new URL every time you
-> restart `cloudflared`. If you restart it, you'll need to update the
-> webhook URL on GitHub to match.
+1. Open your repository → **Settings → Webhooks → Add webhook**.
+2. **Payload URL:** your tunnel URL plus `/webhook`, for example `https://your-random-subdomain.trycloudflare.com/webhook`.
+3. **Content type:** `application/json`.
+4. **Events:** choose **Pushes** and **Pull requests**.
+5. Click **Add webhook**.
 
-### 5. Add the webhook on GitHub
-
-1. Go to your repository → **Settings** → **Webhooks** → **Add webhook**
-2. **Payload URL**: your Cloudflare URL + `/webhook`, e.g.
-   `https://your-random-subdomain.trycloudflare.com/webhook`
-3. **Content type**: `application/json`
-4. **Which events?**: select **Pushes** and **Pull requests**
-   (or "Send me everything" if you want to see all event types)
-5. Click **Add webhook**
-
-GitHub immediately sends a test `ping` event. Check your `python app.py`
-terminal — you should see:
+GitHub immediately sends a `ping`, and your terminal should show:
 
 ```
 ✅ Webhook successfully connected! GitHub sent a ping event.
 ```
 
-### 6. Test it
+### 5. Test it
 
-Push a commit (or open a pull request) on the repository. Watch your
-terminal — a formatted notification should print the moment the event
-arrives on GitHub's end.
+Push a commit or open a pull request, and watch the notification appear in your terminal.
 
 ---
 
@@ -131,10 +129,10 @@ arrives on GitHub's end.
 
 ```
 github-commit-notifier/
-├── app.py              # Flask server + webhook event handler
+├── app.py              # Flask server and event formatters
 ├── requirements.txt    # Python dependencies
-├── .gitignore           # Keeps local environment files out of the repo
-└── README.md            # This file
+├── .gitignore          # Keeps local environment files out of the repo
+└── README.md
 ```
 
 ---
@@ -143,26 +141,35 @@ github-commit-notifier/
 
 | Problem | Likely cause |
 |---|---|
-| Nothing prints in the terminal | The Payload URL is missing `/webhook` at the end, or the Cloudflare Tunnel URL changed after a restart and GitHub is still using the old one |
-| `405` error in GitHub's delivery log | Same as above — the request landed on `/` instead of `/webhook` |
-| `ModuleNotFoundError: No module named 'flask'` | Dependencies weren't installed in the Python environment actually running the script — try `python -m pip install -r requirements.txt` |
-| Cloudflare Tunnel won't start | Make sure `python app.py` is already running first — the tunnel needs something on port 5000 to connect to |
+| Nothing prints in the terminal | The Payload URL is missing `/webhook`, or the tunnel URL changed after a restart |
+| `405` in GitHub's delivery log | The request hit `/` instead of `/webhook` |
+| `ModuleNotFoundError: No module named 'flask'` | Dependencies went into a different Python. Try `python -m pip install -r requirements.txt` |
+| Cloudflare Tunnel won't connect | Start `python app.py` first, since the tunnel needs something listening on port 5000 |
 
 ---
 
-## Possible next steps
+## Security notes
 
-- Send notifications to Slack or Discord instead of (or alongside) the terminal
-- Log events to a small SQLite database for history
-- Verify GitHub's webhook signature for added security
-- Extend to handle additional event types like `issues` or `release`
+This is a learning project meant for local use. Before running it for anything long-lived:
+
+- **Keep Flask's debug mode off** whenever the server is reachable through a tunnel.
+- **Verify webhook signatures.** Set a secret on the GitHub webhook and check the `X-Hub-Signature-256` header, so only GitHub can trigger notifications.
+
+## Roadmap
+
+- [ ] Verify GitHub's webhook signature (`X-Hub-Signature-256`)
+- [ ] Send notifications to Slack or Discord as well as the terminal
+- [ ] Log events to SQLite for history
+- [ ] Handle more event types such as `issues` and `release`
 
 ---
 
 ## Why I built this
 
-This started as a way to understand how GitHub webhooks, tunnels, and a
-receiving server actually connect end to end — not just in theory, but
-wired together and tested with a real push event. It's a small project,
-but every piece of it (the webhook, the tunnel, the parsing logic) is
-something I set up and debugged myself.
+I wanted to understand how GitHub webhooks, tunnels and a receiving server connect end to end, not just in theory but wired together and tested with a real push. It's a small project, but I set up and debugged every piece of it myself: the webhook, the tunnel and the parsing logic.
+
+## Author
+
+**Hafsa Anwar**, AI & Automation Engineer
+
+[Portfolio](https://hafsaanwar.dev) · [LinkedIn](https://www.linkedin.com/in/hafsa-anwar-53b251313/) · [GitHub](https://github.com/Hafsa-Anwar65)
